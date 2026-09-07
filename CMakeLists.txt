@@ -6,6 +6,7 @@ check_include_files("gdb/jit-reader.h" HAVE_GDB_JIT_READER_H)
 
 option(BUILD_FEX_LINUX_TESTS "Build FEXLinuxTests (requires x86 compiler)" FALSE)
 option(BUILD_THUNKS "Build thunks" FALSE)
+option(BUILD_FEXCORE_ONLY "Build only FEXCore and the host-feature helper, for an embedding application" FALSE)
 option(BUILD_FEXCONFIG "Build FEXConfig" TRUE)
 option(ENABLE_CLANG_THUNKS "Build thunks with clang" TRUE)
 option(ENABLE_IWYU "Enable the Include What You Use sanitizer" FALSE)
@@ -53,7 +54,7 @@ if (NOT HOSTLIBS_DATA_DIRECTORY)
 endif()
 
 ## Platform Checks ##
-# Only 64-bit Linux and Windows are supported
+# Only 64-bit Linux, Android and Windows are supported
 
 # NB: SIZEOF_VOID_P is in bytes, not bits
 # On 32-bit systems this is set to 4
@@ -61,10 +62,21 @@ if (NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "Unsupported pointer size ${CMAKE_SIZEOF_VOID_P}."
     " FEX only supports 64-bit (8-byte pointer) systems."
     " If you believe this is in error, file an issue.")
-elseif (NOT (WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+elseif (NOT (WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android"))
   message(FATAL_ERROR "Unsupported system type ${CMAKE_SYSTEM_NAME}."
-    " FEX only supports Linux and Windows."
+    " FEX only supports Linux, Android and Windows."
     " If you believe this is in error, file an issue.")
+endif()
+
+# Android is a Linux kernel with bionic rather than glibc. Accepted here so an
+# embedder can build FEXCore against the NDK sysroot directly; the alternative
+# used elsewhere -- passing CMAKE_SYSTEM_NAME=Linux to slip past this check --
+# gets a glibc cross toolchain instead of bionic, which then cannot be loaded
+# into an Android app process.
+if (CMAKE_SYSTEM_NAME STREQUAL "Android")
+  # bionic has no glibc allocator to hook, and jemalloc's glibc integration
+  # assumes glibc internals that are absent here.
+  set(ENABLE_JEMALLOC_GLIBC_ALLOC FALSE)
 endif()
 
 ## Compiler Checks ##
@@ -167,7 +179,15 @@ if(NOT TARGET uninstall)
 endif()
 
 # These options are meant for package management
-set(TUNE_CPU "native" CACHE STRING "Override the CPU the build is tuned for")
+# "native" inspects the build machine's /proc/cpuinfo, which is both unavailable
+# and wrong when cross-compiling: it would tune for the build host rather than
+# the target. Default to "none" in that case so a cross build works without the
+# caller having to know to override it.
+if (CMAKE_CROSSCOMPILING)
+  set(TUNE_CPU "none" CACHE STRING "Override the CPU the build is tuned for")
+else()
+  set(TUNE_CPU "native" CACHE STRING "Override the CPU the build is tuned for")
+endif()
 set(TUNE_ARCH "generic" CACHE STRING "Override the Arch the build is tuned for")
 set(OVERRIDE_VERSION "detect" CACHE STRING "Override the FEX version")
 set(OVERRIDE_HASH "detect" CACHE STRING "Override the FEX git hash")
@@ -616,6 +636,17 @@ add_subdirectory(External/cephes/)
 add_subdirectory(FEXHeaderUtils/)
 add_subdirectory(CodeEmitter/)
 add_subdirectory(FEXCore/)
+
+# FEXCore-only: build the emulation core and the shared host-feature detection an
+# embedder needs, and stop. Source/Tools/ is skipped because it contains the
+# Linux frontend (FEXInterpreter, LinuxEmulation) which owns its own process,
+# signal handling and syscall dispatch -- all of which an embedding application
+# provides itself. Those tools also assume a glibc Linux frontend and are what
+# make a full build fail for Android.
+if (BUILD_FEXCORE_ONLY)
+  add_subdirectory(Source/Common/)
+  return()
+endif()
 
 if (ARCHITECTURE_arm64 AND NOT MINGW AND NOT BUILD_STEAM_SUPPORT)
   # Binfmt_misc files must be installed prior to Source/ installs

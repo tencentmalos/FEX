@@ -1,6 +1,27 @@
 add_subdirectory(cpp-optparse/)
 
 set(NAME Common)
+
+# An embedding application provides its own process, argument handling and IPC, and
+# does not talk to FEXServer. Build only the host-feature detection it genuinely
+# needs: FEXServerClient.cpp additionally fails on libc++, whose std::function does
+# not satisfy the libstdc++ internals fextl::move_only_function relies on.
+if (BUILD_FEXCORE_ONLY)
+  set(SRCS
+    CPUInfo.cpp
+    HostFeatures.cpp
+    Linux/LinuxVersion.cpp)
+
+  add_library(${NAME} STATIC ${SRCS})
+  target_link_libraries(${NAME} FEXCore_Base FEXHeaderUtils range-v3::range-v3)
+  target_include_directories(${NAME} PRIVATE ${CMAKE_BINARY_DIR}/generated)
+  set_target_properties(${NAME} PROPERTIES
+    C_VISIBILITY_PRESET hidden
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN TRUE)
+  return()
+endif()
+
 set(SRCS
   Config.cpp
   CPUInfo.cpp

@@ -290,9 +290,16 @@ endfunction()
 
 AddObject(${PROJECT_NAME}_object)
 AddLibrary(${PROJECT_NAME} STATIC)
-AddLibrary(${PROJECT_NAME}_shared SHARED)
 
-if (NOT MINGW AND NOT BUILD_STEAM_SUPPORT)
+# The shared target links only the object files and relies on the Linux frontend to
+# supply FEXCore_Base's symbols at final link time, so it does not stand alone. An
+# embedding application links the static library into its own shared object instead,
+# where it can also satisfy those dependencies.
+if (NOT BUILD_FEXCORE_ONLY)
+  AddLibrary(${PROJECT_NAME}_shared SHARED)
+endif()
+
+if (NOT MINGW AND NOT BUILD_STEAM_SUPPORT AND NOT BUILD_FEXCORE_ONLY)
   install(TARGETS ${PROJECT_NAME}_shared LIBRARY
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     COMPONENT Libraries)
@@ -318,4 +325,6 @@ if (NOT MINGW)
 endif()
 
 # The shared library should always link enabled jemalloc libraries
-target_link_libraries(${PROJECT_NAME}_shared PRIVATE JemallocLibs)
+if (NOT BUILD_FEXCORE_ONLY)
+  target_link_libraries(${PROJECT_NAME}_shared PRIVATE JemallocLibs)
+endif()

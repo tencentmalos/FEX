@@ -191,7 +191,17 @@ void* memalign(size_t align, size_t s) {
   return ::memalign(align, s);
 }
 void* valloc(size_t size) {
+#ifdef __BIONIC__
+  // bionic dropped valloc, which was deprecated in POSIX.1-2001 and removed in 2008. It is defined
+  // as a page-aligned malloc, so express that directly rather than losing the alignment guarantee.
+  void* Result {};
+  if (::posix_memalign(&Result, static_cast<size_t>(::sysconf(_SC_PAGESIZE)), size) != 0) {
+    return nullptr;
+  }
+  return Result;
+#else
   return ::valloc(size);
+#endif
 }
 int posix_memalign(void** r, size_t a, size_t s) {
   return ::posix_memalign(r, a, s);
