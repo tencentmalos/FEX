@@ -444,8 +444,13 @@ FEXCore::Core::InternalThreadState* ContextImpl::CreateThread(const FEXCore::Cor
 }
 
 void ContextImpl::DestroyThread(FEXCore::Core::InternalThreadState* Thread) {
-  FEXCore::Allocator::VirtualProtect(&Thread->InterruptFaultPage, sizeof(Thread->InterruptFaultPage),
-                                     Allocator::ProtectOptions::Read | Allocator::ProtectOptions::Write);
+  // Restore write permission before freeing: the fault page may currently be PROT_NONE, and handing
+  // inaccessible memory back to the allocator would fault whenever it is reused, far from here.
+  if (!FEXCore::Allocator::VirtualProtect(&Thread->InterruptFaultPage, sizeof(Thread->InterruptFaultPage),
+                                          Allocator::ProtectOptions::Read | Allocator::ProtectOptions::Write)) {
+    ERROR_AND_DIE_FMT("Failed to restore permissions on interrupt fault page at {} before freeing thread state",
+                      static_cast<void*>(&Thread->InterruptFaultPage));
+  }
   delete Thread;
 }
 

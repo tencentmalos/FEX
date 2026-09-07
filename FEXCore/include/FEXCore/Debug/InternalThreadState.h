@@ -87,7 +87,11 @@ struct UnalignedExclusiveStore {
   uint8_t Size;
 };
 
-struct alignas(FEXCore::Utils::FEX_PAGE_SIZE) InternalThreadState : public FEXCore::Allocator::FEXAllocOperators {
+// Aligned to FEX_MAX_HOST_PAGE_SIZE so that the allocation itself lands on a host page boundary.
+// The InterruptFaultPage member below is mprotect'd independently of the rest of the object, which
+// requires the object base to be host-page-aligned; 4096 alignment leaves the fault page starting
+// mid-page on a 16k host and mprotect then fails with EINVAL.
+struct alignas(FEXCore::Utils::FEX_MAX_HOST_PAGE_SIZE) InternalThreadState : public FEXCore::Allocator::FEXAllocOperators {
   FEXCore::Core::CpuStateFrame* const CurrentFrame = &BaseFrameState;
 
   FEXCore::Context::Context* const CTX;
@@ -121,13 +125,27 @@ struct alignas(FEXCore::Utils::FEX_PAGE_SIZE) InternalThreadState : public FEXCo
   // BaseFrameState should always be at the end, directly before the interrupt fault page
   FEXCore::Core::CpuStateFrame BaseFrameState {};
 
-  // Can be reprotected as RO to trigger an interrupt at generated code block entrypoints
-  alignas(FEXCore::Utils::FEX_PAGE_SIZE) uint8_t InterruptFaultPage[FEXCore::Utils::FEX_PAGE_SIZE];
+  // Can be reprotected as RO to trigger an interrupt at generated code block entrypoints.
+  //
+  // Aligned and sized to FEX_MAX_HOST_PAGE_SIZE rather than FEX_PAGE_SIZE: mprotect operates on
+  // host page granularity, so on a 16k host a 4096-aligned member starts mid-page and mprotect
+  // fails with EINVAL, leaving the interrupt mechanism unable to fault. alignas needs a
+  // compile-time constant, so this uses the maximum supported host page instead of the runtime
+  // value; on a 4k host it merely over-reserves.
+  //
+  // This must stay an inline member: the JIT encodes its offset from BaseFrameState as an
+  // immediate (see Arm64JITCore::EmitSuspendInterruptCheck), so it cannot become a separate
+  // mapping without also changing code generation.
+  alignas(FEXCore::Utils::FEX_MAX_HOST_PAGE_SIZE) uint8_t InterruptFaultPage[FEXCore::Utils::FEX_MAX_HOST_PAGE_SIZE];
 };
 static_assert(std::is_standard_layout_v<FEXCore::Core::InternalThreadState>);
 // Maximum unsigned-offset store range for fault page.
 static_assert(
   (offsetof(FEXCore::Core::InternalThreadState, InterruptFaultPage) - offsetof(FEXCore::Core::InternalThreadState, BaseFrameState)) <= 65520,
   "Fault page is outside of immediate range from CPU state");
+// The fault page must cover at least one whole host page for mprotect to isolate it from
+// neighbouring members; protecting less would round up and strip permissions from BaseFrameState.
+static_assert(sizeof(FEXCore::Core::InternalThreadState::InterruptFaultPage) >= FEXCore::Utils::FEX_MAX_HOST_PAGE_SIZE,
+              "Interrupt fault page must be at least one host page");
 
 } // namespace FEXCore::Core
