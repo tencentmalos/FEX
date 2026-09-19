@@ -229,6 +229,73 @@ DEF_OP(PrintMsg) {
   PopDynamicRegs();
 }
 
+DEF_OP(DebugMemoryAccess) {
+  const auto Op = IROp->C<IR::IROp_DebugMemoryAccess>();
+  PushDynamicRegs(TMP1);
+  SpillStaticRegs(TMP1);
+  // The callback must not change guest NZCV, FPCR or FPSR. Dynamic vector/GPR
+  // values (including the memory operation's result) are preserved above.
+  sub(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::rsp, ARMEmitter::Reg::rsp, 32);
+  mrs(TMP1, ARMEmitter::SystemRegister::NZCV);
+  str(TMP1, ARMEmitter::Reg::rsp, 0);
+  mrs(TMP1, ARMEmitter::SystemRegister::FPCR);
+  str(TMP1, ARMEmitter::Reg::rsp, 8);
+  mrs(TMP1, ARMEmitter::SystemRegister::FPSR);
+  str(TMP1, ARMEmitter::Reg::rsp, 16);
+  mov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r1, GetReg(Op->Address));
+  mov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r0, STATE);
+  LoadConstant(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r2, Op->Bytes);
+  LoadConstant(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r3, Op->Access);
+  ldr(ARMEmitter::XReg::x4, STATE, offsetof(FEXCore::Core::CpuStateFrame, Pointers.DebugMemoryAccess));
+  if (!CTX->Config.DisableVixlIndirectCalls) [[unlikely]] {
+    GenerateIndirectRuntimeCall<void, uint64_t, uint64_t, uint64_t, uint64_t>(ARMEmitter::Reg::r4);
+  } else {
+    blr(ARMEmitter::Reg::r4);
+  }
+  ldr(TMP1, ARMEmitter::Reg::rsp, 0);
+  msr(ARMEmitter::SystemRegister::NZCV, TMP1);
+  ldr(TMP1, ARMEmitter::Reg::rsp, 8);
+  msr(ARMEmitter::SystemRegister::FPCR, TMP1);
+  ldr(TMP1, ARMEmitter::Reg::rsp, 16);
+  msr(ARMEmitter::SystemRegister::FPSR, TMP1);
+  add(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::rsp, ARMEmitter::Reg::rsp, 32);
+  FillStaticRegs();
+  PopDynamicRegs();
+}
+
+DEF_OP(GuestProfileProbe) {
+  const auto Op = IROp->C<IR::IROp_GuestProfileProbe>();
+  PushDynamicRegs(TMP1);
+  SpillStaticRegs(TMP1);
+  // The callback must not change guest NZCV, FPCR or FPSR. Dynamic vector/GPR
+  // values (including the memory operation's result) are preserved above.
+  sub(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::rsp, ARMEmitter::Reg::rsp, 32);
+  mrs(TMP1, ARMEmitter::SystemRegister::NZCV);
+  str(TMP1, ARMEmitter::Reg::rsp, 0);
+  mrs(TMP1, ARMEmitter::SystemRegister::FPCR);
+  str(TMP1, ARMEmitter::Reg::rsp, 8);
+  mrs(TMP1, ARMEmitter::SystemRegister::FPSR);
+  str(TMP1, ARMEmitter::Reg::rsp, 16);
+  mov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r1, GetReg(Op->Stack));
+  mov(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r0, STATE);
+  LoadConstant(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::r2, Op->Site);
+  ldr(ARMEmitter::XReg::x4, STATE, offsetof(FEXCore::Core::CpuStateFrame, Pointers.GuestProfileProbe));
+  if (!CTX->Config.DisableVixlIndirectCalls) [[unlikely]] {
+    GenerateIndirectRuntimeCall<void, uint64_t, uint64_t, uint64_t>(ARMEmitter::Reg::r4);
+  } else {
+    blr(ARMEmitter::Reg::r4);
+  }
+  ldr(TMP1, ARMEmitter::Reg::rsp, 0);
+  msr(ARMEmitter::SystemRegister::NZCV, TMP1);
+  ldr(TMP1, ARMEmitter::Reg::rsp, 8);
+  msr(ARMEmitter::SystemRegister::FPCR, TMP1);
+  ldr(TMP1, ARMEmitter::Reg::rsp, 16);
+  msr(ARMEmitter::SystemRegister::FPSR, TMP1);
+  add(ARMEmitter::Size::i64Bit, ARMEmitter::Reg::rsp, ARMEmitter::Reg::rsp, 32);
+  FillStaticRegs();
+  PopDynamicRegs();
+}
+
 DEF_OP(ProcessorID) {
   if (CTX->HostFeatures.SupportsCPUIndexInTPIDRRO) {
     mrs(GetReg(Node), ARMEmitter::SystemRegister::TPIDRRO_EL0);

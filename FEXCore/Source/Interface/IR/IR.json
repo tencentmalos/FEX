@@ -241,6 +241,14 @@
         "Desc": ["Debug operation that prints an SSA value to the console",
                  "May only print 64bits of the value"]
       },
+      "GuestProfileProbe GPR:$Stack, u64:$Site": {
+        "HasSideEffects": true,
+        "Desc": ["Opt-in embedder execution probe preserving all JIT architectural state."]
+      },
+      "DebugMemoryAccess GPR:$Address, u64:$Bytes, u64:$Access": {
+        "HasSideEffects": true,
+        "Desc": ["Embedder opt-in memory access observation; preserves JIT registers and host flags."]
+      },
       "PrintMsg c_str:$Value": {
         "HasSideEffects": true,
         "Desc": ["Debug operation that prints an string to the console.",

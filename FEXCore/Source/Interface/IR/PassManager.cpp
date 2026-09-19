@@ -90,6 +90,12 @@ Pass* PassManager::InsertPass(fextl::unique_ptr<Pass> Pass, const fextl::string&
   return PassPtr;
 }
 
+Pass* PassManager::PrependPass(fextl::unique_ptr<Pass> Pass, const fextl::string& Name) {
+  auto* PassPtr = InsertAt(Passes.begin(), std::move(Pass))->get();
+  AttemptNameMapping(Name, PassPtr);
+  return PassPtr;
+}
+
 PassManager::PassArrayType::iterator PassManager::InsertAt(PassArrayType::iterator pos, fextl::unique_ptr<Pass> Pass) {
   Pass->RegisterPassManager(this);
   return Passes.insert(pos, std::move(Pass));

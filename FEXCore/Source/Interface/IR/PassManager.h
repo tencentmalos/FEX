@@ -50,6 +50,8 @@ public:
   // Inserts a new pass into the manager, optionally also assigning a name to it
   // for use in the lookup functions,
   Pass* InsertPass(fextl::unique_ptr<Pass> Pass, const fextl::string& Name = "");
+  // Embedder instrumentation must run before optimizations/register allocation.
+  Pass* PrependPass(fextl::unique_ptr<Pass> Pass, const fextl::string& Name = "");
 
   // Whether or not a pass with the given name is within the manager.
   bool HasPass(const fextl::string& Name) const {

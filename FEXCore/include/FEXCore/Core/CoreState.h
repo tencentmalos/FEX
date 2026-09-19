@@ -340,6 +340,12 @@ struct JITPointers {
   uint64_t PrintValue {};
   uint64_t PrintVectorValue {};
   uint64_t PrintMsgValue {};
+  // Optional embedder debug IR callback. No calls are emitted unless the
+  // embedder inserts DebugMemoryAccess operations into a debug translation.
+  // void(CpuStateFrame*, uint64_t address, uint64_t bytes, uint64_t access_mask).
+  uint64_t DebugMemoryAccess {};
+  // void(CpuStateFrame*, uint64_t stack, uint64_t site); only emitted when armed.
+  uint64_t GuestProfileProbe {};
   uint64_t ThreadRemoveCodeEntryFromJIT {};
   uint64_t CPUIDObj {};
   uint64_t CPUIDFunction {};
